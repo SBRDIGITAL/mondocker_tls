@@ -114,7 +114,7 @@
    docker ps
    ```
    или
-  ```bash
+   ```bash
    docker-compose ps
    ```
 
