@@ -1,0 +1,27 @@
+services:
+  mongo:
+    image: mongo:latest
+    container_name: mondocker_tls_1
+    ports:
+      - "35135:27017"
+    volumes:
+      - ./data/db/mongo_data:/data/db
+      - ./certs:/etc/ssl/mongo
+    networks:
+      - mongo-cluster
+    command: [
+        "mongod",
+        "--tlsMode",
+        "requireTLS",
+        "--tlsCertificateKeyFile",
+        "/etc/ssl/mongo/combined.pem",
+        "--tlsCAFile",
+        "/etc/ssl/mongo/ca.pem",
+        "--verbose"
+      ]
+
+volumes:
+  mongo_data:
+
+networks:
+  mongo-cluster:

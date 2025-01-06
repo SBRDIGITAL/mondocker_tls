@@ -1,0 +1,15 @@
+*.pem
+*.key
+*.crt
+*.csr
+*.log
+*.pyc
+*__pycache__
+.venv
+venv
+.env
+env
+mongo_data
+mongo_data_1
+data
+certs
