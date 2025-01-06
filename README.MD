@@ -1,4 +1,4 @@
-# Методичка по развёртыванию MongoDB в Docker Compose
+# Методичка по развёртыванию MongoDB в Docker Compose и подключению к ней с помощью TLS/SSL сертификатов.
 
 ### Шаг 1: Установка зависимости `Docker`, `Docker Compose` и `OpenSSL`
 
