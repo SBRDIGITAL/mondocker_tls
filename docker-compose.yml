@@ -18,9 +18,9 @@ services:
         "--tlsCAFile",
         "/etc/ssl/mongo/ca.pem",
         "--verbose",
-        "--noJournal",
-        "--setParameter",
-        "diagnosticDataCollection=false"
+        "--quiet",  # Уменьшение объема выводимых логов
+        "--logpath",
+        "/dev/null",  # Перенаправление логов в "никуда"
       ]
 
 volumes:
