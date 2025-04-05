@@ -141,7 +141,14 @@
 ---
 
 ### Шаг 7: Очистка файлов
-1. Иногда нужно удалять файлы диагностики и метрики если они вам не нужны, используя: `rm -rf diagnostic.data/` и `rm -rf journal/` , находясь в `/mondocker_tls/data/db/mongo_data`.
+1. Иногда нужно удалять файлы диагностики и метрики если они вам не нужны, находясь в `/mondocker_tls/data/db/mongo_data`, используйте команды: 
+```bash
+rm -rf diagnostic.data/
+```
+и
+```bash
+rm -rf journal/
+```
 
 
 
