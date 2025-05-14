@@ -219,3 +219,208 @@ networks:
 - **networks**: Определяет сети, которые могут быть использованы сервисами. В данном случае создается сеть `mongo-cluster`, к которой может подключаться контейнер MongoDB.
 
 Эти настройки позволяют развернуть MongoDB с поддержкой TLS, обеспечивая безопасное соединение между клиентами и сервером.
+
+---
+
+## Пример подключения с помощью Python
+```python
+from asyncio import to_thread
+
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCursor, AsyncIOMotorCollection
+from pymongo.errors import ConnectionFailure
+
+from core.database.db_settings import (
+    MongoLiterals as MLit,
+    Settings, mongo_settings,
+    MongoHelper    
+)
+
+from core.utils.aiomonlogger.monlogger import monlogger
+
+
+
+class AsyncMongoCRUD:
+    """
+    ## Асинхронный класс для выполнения базовых операций `CRUD` с коллекцией `MongoDB`.
+
+    Класс обеспечивает безопасное подключение к MongoDB с использованием `TLS/SSL`, включая самоподписанные сертификаты, 
+    и предоставляет методы для вставки, чтения, обновления и удаления документов.
+
+    Atributes:
+        uri (str): URI для подключения к MongoDB.
+        db_name (str): Имя базы данных, с которой работает класс.
+        ca_cert_path (str): Путь к файлу CA-сертификата.
+        combined_cert_path (str): Путь к файлу сертификата клиента и закрытого ключа.
+        client (AsyncIOMotorClient): Асинхронный клиент MongoDB.
+        db (AsyncIOMotorDatabase): Экземпляр базы данных MongoDB.
+    """
+    def __init__(self,
+        uri: str = mongo_settings.URI,
+        db_name: str = mongo_settings.DB_NAME,
+        ca_cert_path: str = mongo_settings.CA_CERT_PATH,
+        combined_cert_path: str = mongo_settings.COMBINED_CERT_PATH
+    ) -> None:
+        """
+        ## Инициализирует экземпляр класса `AsyncMongoCRUD`.
+
+        Настраивает параметры для подключения к `MongoDB` с использованием `TLS/SSL`. 
+        Устанавливает пути к сертификатам для безопасного соединения.
+
+        Args:
+            uri (str): URI для подключения к `MongoDB`.
+            db_name (str): Имя базы данных, с которой будет работать класс.
+            ca_cert_path (str): Путь к файлу CA-сертификата.
+            combined_cert_path (str): Путь к файлу сертификата клиента и ключа.
+        """
+        self.db_name = db_name
+        self.uri = uri
+        self.ca_cert_path = ca_cert_path
+        self.combined_cert_path = combined_cert_path
+        self.mh = MongoHelper()
+        self.client: AsyncIOMotorClient = None
+        self.db = None
+
+    def __return_collection(self, cn: MLit.CollectionsName) -> AsyncIOMotorCollection:
+        """
+        ## Возвращает объект коллекции по её названию.
+
+        Этот метод используется для получения экземпляра коллекции `MongoDB` на основе имени коллекции.
+
+        Args:
+            cn (MLit.CollectionsName): Имя коллекции, заданное в виде перечисления `CollectionsName`.
+
+        Returns:
+            AsyncIOMotorCollection: Экземпляр коллекции `MongoDB` для выполнения операций.
+        """
+        return self.db[cn]
+
+    async def connect(self):
+        """
+        ## Устанавливает соединение с базой данных при помощи `TLS\SSL` сертификатов.
+        
+        Пример использования:
+        ```python
+            from asyncio import run
+            db = AsyncMongoCRUD()
+
+            if __name__ == '__main__':
+                async def start():
+                    await db.connect()
+                    await db.create('users', {"name": "Jonh"})
+                    await db.close()  # После работы закрываем соединение
+                run(start())
+        ```
+        """
+        # Создание клиента Motor с использованием SSL
+        try:
+            self.client = AsyncIOMotorClient(
+                self.uri, tls=True,
+                tlsAllowInvalidCertificates=True,  # Игнорировать недействительные сертификаты
+                # tlsInsecure=True,  # Игнорировать ошибки проверки сертификатов
+                tlsCAFile=self.ca_cert_path,
+                tlsCertificateKeyFile=self.combined_cert_path,
+            )
+            # Проверяем подключение
+            res = await self.client.admin.command("ping")
+            print(f'Проверка соединения:\n{res=}')
+            self.db = self.client[self.db_name]
+            
+        except (ConnectionFailure, Exception,) as ex:
+            print(f'Ошибка подключения к MongoDB: {ex}')
+            raise
+    
+    async def close(self):
+        """ ## Закрывает соединение с базой данных. """
+        if self.client:
+            self.client.close()
+    
+    async def create(self, cn: MLit.CollectionsName, document: dict) -> None:
+        """
+        ## Создает новый документ в коллекции с автоинкрементным _id.
+
+        Args:
+            cn (MLit.CollectionsName): Название коллекции в которой будет создана запись.
+            document (dict): Документ, который будет добавлен в коллекцию.
+        """
+        document = await to_thread(self.mh.add_timestamps, data=document, time_field='createdAt')
+        collection = await to_thread(self.__return_collection, cn)
+        result = await collection.insert_one(document)
+        await monlogger.info(f'Вставлен документ с id: {result.inserted_id}')
+
+    async def read(self,
+        cn: MLit.CollectionsName,
+        query: dict,
+        mode: MLit.QueryModes = 'one',
+        max_len: int = None
+    ) -> dict | None | list[dict]:
+        """
+        ## Читает документы из коллекции по заданному запросу.
+
+        Args:
+            cn (MLit.CollectionsName): Название коллекции в которой будет прочитана запись.
+            query (dict): Запрос для поиска документов.
+            mode (MLit.QueryModes, optional): Режим чтения. 
+                'one' - вернуть только один документ, 
+                'many' - вернуть все документы, соответствующие запросу. 
+                По умолчанию 'one'.
+            max_len (int, optional): Максимальное кол-во документов для возврата в режиме 'many'. 
+                По умолчанию None, что означает возврат всех документов.
+
+        Returns:
+            dict | None | list[dict]:
+                Cловарь, если запись найдена(при mode == 'one').
+                None если ничего не найдено(при mode == 'one') или если произошла ошибка.
+                list[dict]: список записей((при mode == 'many')) если записи есть, иначе пустой список.
+        """
+        try:
+            collection = await to_thread(self.__return_collection, cn)
+            if mode == 'one':
+                return await collection.find_one(query)
+            elif mode == 'many':
+                result: AsyncIOMotorCursor = await to_thread(collection.find, query)
+                return await result.to_list(length=max_len)
+                    
+        except Exception as ex:
+            await monlogger.ex(ex, f'Ошибка при чтении из коллекции {cn}')
+            raise ex
+
+    async def update(self, cn: MLit.CollectionsName, query: dict, update_values: dict) -> None:
+        """
+        ## Обновляет документ в коллекции по заданному запросу.
+
+        Args:
+            cn (MLit.CollectionsName): Название коллекции в которой будет обновлена запись.
+            query (dict): Запрос для поиска документа, который нужно удалить.
+            update_values (dict): Значения, которые нужно обновить 
+        """
+        collection = await to_thread(self.__return_collection, cn)
+        document = await to_thread(self.mh.add_timestamps, data=update_values, time_field='updatedAt')
+        result = await collection.update_one(query, {'$set': document})
+        await monlogger.info(f'Изменено {result.modified_count} документ(ов).')
+
+    async def delete(self, cn: MLit.CollectionsName, query: dict, mode: MLit.QueryModes = 'one') -> None:
+        """
+        ## Удаляет документы из коллекции по заданному запросу.
+
+        Args:
+            cn (MLit.CollectionsName): Название коллекции в которой будет удалена запись.
+            query (dict): Запрос для поиска документов, которые нужно удалить.
+            mode (MLit.QueryModes, optional): Режим удаления. 
+                'one' - удалить только один документ, 
+                'many' - удалить все документы, соответствующие запросу. 
+                По умолчанию 'one'.
+
+        Вывод:
+            None: Метод выводит количество удаленных документов в консоль.
+        """
+        collection = await to_thread(self.__return_collection, cn)
+        if mode == 'one':
+            result = await collection.delete_one(query)
+        else:
+            result = await collection.delete_many(query)
+        await monlogger.info(f'Удалено {result.deleted_count} документ(ов).')
+        
+        
+
+db = AsyncMongoCRUD()
+```
