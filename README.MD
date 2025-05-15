@@ -29,7 +29,7 @@
 1. **Клонируйте репозиторий**:
    - Используйте следующую команду для клонирования репозитория:
    ```bash
-   git clone https://github.com/SBRDIGITAL/sbr_mongo_db.git ./
+   git clone https://github.com/SBRDIGITAL/mondocker_tls.git ./
    ```
 
 ### Шаг 3: Создание сертификатов
